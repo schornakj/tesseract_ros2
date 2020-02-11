@@ -129,6 +129,7 @@ install(EXPORT ${PROJECT_NAME}-targets NAMESPACE tesseract:: DESTINATION lib/cma
 install(TARGETS
    ${PROJECT_NAME}_environment
    ${PROJECT_NAME}_environment_node
+   ${PROJECT_NAME}_contacts_node
    DESTINATION lib/${PROJECT_NAME})
 
 # Mark cpp header files for installation
