@@ -5,22 +5,31 @@
 #include <tesseract_motion_planners/core/waypoint.h>
 #include <tesseract_rosutils/conversions.h>
 
+#include <console_bridge/console.h>
+
 using namespace tesseract_planning_nodes;
 using std::placeholders::_1;
 using std::placeholders::_2;
 
 PlanningWorkerNode::PlanningWorkerNode()
+  : PlanningWorkerNode("test")
+{
+}
+
+PlanningWorkerNode::PlanningWorkerNode(const std::string& id)
   : rclcpp::Node ("planning_worker_node")
+  , id_(id)
   , solve_plan_as_(rclcpp_action::create_server<SolvePlan>(
                      this->get_node_base_interface(),
                      this->get_node_clock_interface(),
                      this->get_node_logging_interface(),
                      this->get_node_waitables_interface(),
-                     "solve_plan",
+                     id_ + "/solve_plan",
                      std::bind(&PlanningWorkerNode::solve_plan_handle_goal, this, _1, _2),
                      std::bind(&PlanningWorkerNode::solve_plan_handle_cancel, this, _1),
                      std::bind(&PlanningWorkerNode::solve_plan_handle_accepted, this, _1)))
   , environment_state_sub_(this->create_subscription<tesseract_msgs::msg::TesseractState>("monitored_tesseract", 10, std::bind(&PlanningWorkerNode::on_environment_updated, this, _1)))
+  , worker_status_client_(this->create_client<UpdatePlanningWorkerStatus>("update_planning_worker_status"))
 {
   this->declare_parameter("robot_description");
   this->declare_parameter("robot_description_semantic");
@@ -45,6 +54,34 @@ PlanningWorkerNode::PlanningWorkerNode()
   tesseract_local_->init(urdf_xml_string.str(), srdf_xml_string.str(), locator);
 }
 
+PlanningWorkerNode::~PlanningWorkerNode()
+{
+  deregister_worker();
+}
+
+void PlanningWorkerNode::initialize()
+{
+  register_worker();
+}
+
+void PlanningWorkerNode::register_worker()
+{
+  auto register_req = std::make_shared<UpdatePlanningWorkerStatus::Request>();
+  register_req->action = UpdatePlanningWorkerStatus::Request::REGISTER;
+  register_req->id = id_;
+  auto res_future = worker_status_client_->async_send_request(register_req);
+  res_future.wait_for(std::chrono::duration<double>(5.0));
+}
+
+void PlanningWorkerNode::deregister_worker()
+{
+  auto deregister_req = std::make_shared<UpdatePlanningWorkerStatus::Request>();
+  deregister_req->action = UpdatePlanningWorkerStatus::Request::DEREGISTER;
+  deregister_req->id = id_;
+  auto res_future = worker_status_client_->async_send_request(deregister_req);
+  res_future.wait_for(std::chrono::duration<double>(5.0));
+}
+
 rclcpp_action::GoalResponse PlanningWorkerNode::solve_plan_handle_goal(const rclcpp_action::GoalUUID &uuid, std::shared_ptr<const SolvePlan::Goal> goal)
 {
   (void) uuid;
@@ -64,12 +101,13 @@ void PlanningWorkerNode::solve_plan_handle_accepted(const std::shared_ptr<Server
 
 void PlanningWorkerNode::solve_plan_execute(const std::shared_ptr<ServerGoalHandleSolvePlan> goal_handle)
 {
+  CONSOLE_BRIDGE_logInform("Executing solve_plan request");
+
   auto solve_plan_result = std::make_shared<SolvePlan::Result>();
 
   auto goal = goal_handle->get_goal();
 
   tesseract_kinematics::ForwardKinematics::ConstPtr kin = tesseract_local_->getFwdKinematicsManagerConst()->getFwdKinematicSolver(goal->planner_config.manipulator);
-
 
   // Deserialize the planner config message into a tesseract_motion_planners planner object.
   // For this initial implementation only RRTconnect is supported.
@@ -138,6 +176,7 @@ int main(int argc, char** argv)
 {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<tesseract_planning_nodes::PlanningWorkerNode>();
+  node->initialize();
   rclcpp::spin(node);
   rclcpp::shutdown();
   return 0;

@@ -12,6 +12,7 @@ find_package(rclcpp_action REQUIRED)
 find_package(tesseract_msgs REQUIRED)
 find_package(tesseract_rosutils REQUIRED)
 find_package(tesseract_motion_planners REQUIRED)
+find_package(ompl REQUIRED)
 
 # Tesseract ROS Nodes
 add_executable(${PROJECT_NAME}_planning_worker_node src/planning_worker_node.cpp)
@@ -23,6 +24,7 @@ target_link_libraries(${PROJECT_NAME}_planning_worker_node PRIVATE
     ${rclcpp_action_LIBRARIES}
     ${tesseract_msgs_LIBRARIES}
     ${sensor_msgs_LIBRARIES}
+    ${OMPL_LIBRARIES}
     )
 target_compile_options(${PROJECT_NAME}_planning_worker_node PRIVATE -Wall -Wextra -Wsuggest-override -Wconversion -Wsign-conversion)
 set_target_properties(${PROJECT_NAME}_planning_worker_node PROPERTIES CXX_STANDARD 14)
@@ -32,6 +34,7 @@ target_include_directories(${PROJECT_NAME}_planning_worker_node SYSTEM PUBLIC
     ${rclcpp_action_INCLUDE_DIRS}
     ${tesseract_msgs_INCLUDE_DIRS}
     ${sensor_msgs_INCLUDE_DIRS}
+    ${OMPL_INCLUDE_DIRS}
 )
 list (APPEND PACKAGE_LIBRARIES ${PROJECT_NAME}_planning_worker_node)
 

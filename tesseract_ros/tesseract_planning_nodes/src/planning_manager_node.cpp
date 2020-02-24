@@ -1,4 +1,5 @@
 #include <tesseract_planning_nodes/planning_manager_node.h>
+#include <console_bridge/console.h>
 
 using namespace tesseract_planning_nodes;
 using std::placeholders::_1;
@@ -32,6 +33,8 @@ void PlanningManagerNode::handle_update_planning_worker_status(const std::shared
       response->success = false;
       return;
     }
+
+    CONSOLE_BRIDGE_logInform("Registered worker with id %s", id.c_str());
   }
   else if (request->action == UpdatePlanningWorkerStatus::Request::DEREGISTER)
   {
@@ -52,15 +55,20 @@ void PlanningManagerNode::handle_update_planning_worker_status(const std::shared
     }
 
     solve_plan_clients_.erase(client_mapped);
+    CONSOLE_BRIDGE_logInform("Deregistered worker with id %s", id.c_str());
   }
   else if (request->action == UpdatePlanningWorkerStatus::Request::UPDATE)
   {
     auto client_mapped = solve_plan_clients_.find(id);
     if (request->status == UpdatePlanningWorkerStatus::Request::BUSY)
+    {
       client_mapped->second.first = true;
+      CONSOLE_BRIDGE_logInform("Worker with id %s is now BUSY", id.c_str());
+    }
     else if (request->status == UpdatePlanningWorkerStatus::Request::IDLE)
     {
       client_mapped->second.first = false;
+      CONSOLE_BRIDGE_logInform("Worker with id %s is now IDLE", id.c_str());
     }
     else
     {
