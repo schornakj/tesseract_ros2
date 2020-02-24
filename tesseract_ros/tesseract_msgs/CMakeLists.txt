@@ -44,6 +44,7 @@ set(msg_files
     "msg/ObjectColor.msg"
     "msg/PlannerConfig.msg"
     "msg/PlannerConfigurator.msg"
+    "msg/PlanningWorkerStatus.msg"
     "msg/SceneGraph.msg"
     "msg/TesseractInitInfo.msg"
     "msg/TesseractState.msg"
@@ -58,6 +59,7 @@ set(srv_files
     "srv/GetEnvironmentInformation.srv"
     "srv/ModifyEnvironment.srv"
     "srv/SaveSceneGraph.srv"
+    "srv/UpdatePlanningWorkerStatus.srv"
 )
 
 set(action_files

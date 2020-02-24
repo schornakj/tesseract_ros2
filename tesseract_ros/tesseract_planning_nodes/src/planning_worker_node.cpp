@@ -22,7 +22,27 @@ PlanningWorkerNode::PlanningWorkerNode()
                      std::bind(&PlanningWorkerNode::solve_plan_handle_accepted, this, _1)))
   , environment_state_sub_(this->create_subscription<tesseract_msgs::msg::TesseractState>("monitored_tesseract", 10, std::bind(&PlanningWorkerNode::on_environment_updated, this, _1)))
 {
+  this->declare_parameter("robot_description");
+  this->declare_parameter("robot_description_semantic");
 
+  std::string urdf_path, srdf_path;
+  if (!this->get_parameter("robot_description", urdf_path))
+  {
+    return;
+  }
+  if (!this->get_parameter("robot_description_semantic", srdf_path))
+  {
+    return;
+  }
+  std::stringstream urdf_xml_string, srdf_xml_string;
+  std::ifstream urdf_in(urdf_path);
+  urdf_xml_string << urdf_in.rdbuf();
+  std::ifstream srdf_in(srdf_path);
+  srdf_xml_string << srdf_in.rdbuf();
+
+  tesseract_local_ = std::make_shared<tesseract::Tesseract>();
+  tesseract_scene_graph::ResourceLocator::Ptr locator = std::make_shared<tesseract_rosutils::ROSResourceLocator>();
+  tesseract_local_->init(urdf_xml_string.str(), srdf_xml_string.str(), locator);
 }
 
 rclcpp_action::GoalResponse PlanningWorkerNode::solve_plan_handle_goal(const rclcpp_action::GoalUUID &uuid, std::shared_ptr<const SolvePlan::Goal> goal)
@@ -49,6 +69,10 @@ void PlanningWorkerNode::solve_plan_execute(const std::shared_ptr<ServerGoalHand
   auto goal = goal_handle->get_goal();
 
   tesseract_kinematics::ForwardKinematics::ConstPtr kin = tesseract_local_->getFwdKinematicsManagerConst()->getFwdKinematicSolver(goal->planner_config.manipulator);
+
+
+  // Deserialize the planner config message into a tesseract_motion_planners planner object.
+  // For this initial implementation only RRTconnect is supported.
 
   std::vector<tesseract_motion_planners::OMPLPlannerConfigurator::ConstPtr> ompl_configurators;
 

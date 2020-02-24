@@ -35,6 +35,27 @@ target_include_directories(${PROJECT_NAME}_planning_worker_node SYSTEM PUBLIC
 )
 list (APPEND PACKAGE_LIBRARIES ${PROJECT_NAME}_planning_worker_node)
 
+add_executable(${PROJECT_NAME}_planning_manager_node src/planning_manager_node.cpp)
+target_link_libraries(${PROJECT_NAME}_planning_manager_node PRIVATE
+    tesseract::tesseract
+    tesseract::tesseract_rosutils
+    tesseract::tesseract_motion_planners_ompl
+    ${rclcpp_LIBRARIES}
+    ${rclcpp_action_LIBRARIES}
+    ${tesseract_msgs_LIBRARIES}
+    ${sensor_msgs_LIBRARIES}
+    )
+target_compile_options(${PROJECT_NAME}_planning_manager_node PRIVATE -Wall -Wextra -Wsuggest-override -Wconversion -Wsign-conversion)
+set_target_properties(${PROJECT_NAME}_planning_manager_node PROPERTIES CXX_STANDARD 14)
+target_include_directories(${PROJECT_NAME}_planning_manager_node PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>")
+target_include_directories(${PROJECT_NAME}_planning_manager_node SYSTEM PUBLIC
+    ${rclcpp_INCLUDE_DIRS}
+    ${rclcpp_action_INCLUDE_DIRS}
+    ${tesseract_msgs_INCLUDE_DIRS}
+    ${sensor_msgs_INCLUDE_DIRS}
+)
+list (APPEND PACKAGE_LIBRARIES ${PROJECT_NAME}_planning_manager_node)
+
 ament_export_dependencies(
     roscpp
     tesseract_msgs
@@ -55,6 +76,7 @@ install(EXPORT ${PROJECT_NAME}-targets NAMESPACE tesseract:: DESTINATION lib/cma
 
 install(TARGETS
    ${PROJECT_NAME}_planning_worker_node
+   ${PROJECT_NAME}_planning_manager_node
    DESTINATION lib/${PROJECT_NAME})
 
 # Mark cpp header files for installation
