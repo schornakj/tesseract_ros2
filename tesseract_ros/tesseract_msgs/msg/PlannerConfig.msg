@@ -1,0 +1,17 @@
+#ompl_freespace_planner_config
+sensor_msgs/JointState start_state
+sensor_msgs/JointState end_state
+float64[] weights
+
+# ompl_planner_config
+tesseract_msgs/PlannerConfigurator[] configurators
+float64 planning_time
+int32 max_solutions
+bool simplify
+int32 n_output_states
+bool optimize
+string manipulator
+bool collision_check
+bool collision_continuous
+float64 collision_safety_margin
+float64 longest_valid_segment_length
