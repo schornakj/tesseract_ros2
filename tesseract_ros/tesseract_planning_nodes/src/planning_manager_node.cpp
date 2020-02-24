@@ -20,6 +20,8 @@ void PlanningManagerNode::handle_update_planning_worker_status(const std::shared
 {
   std::string id = request->id;
 
+  CONSOLE_BRIDGE_logError("Received service request from worker id %s", id.c_str());
+
   if (request->action == UpdatePlanningWorkerStatus::Request::REGISTER)
   {
     auto res = solve_plan_clients_.emplace(id, std::make_pair(false, rclcpp_action::create_client<SolvePlan>(this->get_node_base_interface(),
@@ -34,7 +36,7 @@ void PlanningManagerNode::handle_update_planning_worker_status(const std::shared
       return;
     }
 
-    CONSOLE_BRIDGE_logInform("Registered worker with id %s", id.c_str());
+    CONSOLE_BRIDGE_logError("Registered worker with id %s", id.c_str());
   }
   else if (request->action == UpdatePlanningWorkerStatus::Request::DEREGISTER)
   {
@@ -55,7 +57,7 @@ void PlanningManagerNode::handle_update_planning_worker_status(const std::shared
     }
 
     solve_plan_clients_.erase(client_mapped);
-    CONSOLE_BRIDGE_logInform("Deregistered worker with id %s", id.c_str());
+    CONSOLE_BRIDGE_logError("Deregistered worker with id %s", id.c_str());
   }
   else if (request->action == UpdatePlanningWorkerStatus::Request::UPDATE)
   {
@@ -63,12 +65,12 @@ void PlanningManagerNode::handle_update_planning_worker_status(const std::shared
     if (request->status == UpdatePlanningWorkerStatus::Request::BUSY)
     {
       client_mapped->second.first = true;
-      CONSOLE_BRIDGE_logInform("Worker with id %s is now BUSY", id.c_str());
+      CONSOLE_BRIDGE_logError("Worker with id %s is now BUSY", id.c_str());
     }
     else if (request->status == UpdatePlanningWorkerStatus::Request::IDLE)
     {
       client_mapped->second.first = false;
-      CONSOLE_BRIDGE_logInform("Worker with id %s is now IDLE", id.c_str());
+      CONSOLE_BRIDGE_logError("Worker with id %s is now IDLE", id.c_str());
     }
     else
     {

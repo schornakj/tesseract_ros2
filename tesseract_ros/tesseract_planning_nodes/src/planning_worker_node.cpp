@@ -12,12 +12,12 @@ using std::placeholders::_1;
 using std::placeholders::_2;
 
 PlanningWorkerNode::PlanningWorkerNode()
-  : PlanningWorkerNode("test")
+  : PlanningWorkerNode("planning_worker_test")
 {
 }
 
 PlanningWorkerNode::PlanningWorkerNode(const std::string& id)
-  : rclcpp::Node ("planning_worker_node")
+  : rclcpp::Node (id)
   , id_(id)
   , solve_plan_as_(rclcpp_action::create_server<SolvePlan>(
                      this->get_node_base_interface(),
@@ -171,11 +171,12 @@ void PlanningWorkerNode::on_environment_updated(const tesseract_msgs::msg::Tesse
   tesseract_rosutils::processMsg(env, *msg);
 }
 
-
 int main(int argc, char** argv)
 {
   rclcpp::init(argc, argv);
-  auto node = std::make_shared<tesseract_planning_nodes::PlanningWorkerNode>();
+  srand(time(NULL));
+  auto node = std::make_shared<tesseract_planning_nodes::PlanningWorkerNode>("planning_worker_" + std::to_string(rand()));
+  rclcpp::sleep_for(std::chrono::seconds(1));
   node->initialize();
   rclcpp::spin(node);
   rclcpp::shutdown();
