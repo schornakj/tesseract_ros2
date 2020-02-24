@@ -1,5 +1,5 @@
 # Goal
-#tesseract_msgs/PlannerConfig planner_config
+tesseract_msgs/PlannerConfig planner_config
 ---
 # Response
 trajectory_msgs/JointTrajectory trajectory

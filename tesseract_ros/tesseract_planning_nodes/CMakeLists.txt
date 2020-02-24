@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 3.5.0)
 project(tesseract_planning_nodes VERSION 0.1.0 LANGUAGES CXX)
 
 find_package(tesseract REQUIRED)
-#find_package(orocos_kdl REQUIRED)
 find_package(Eigen3 REQUIRED)
 
 list(FIND CMAKE_CXX_COMPILE_FEATURES cxx_std_17 CXX_FEATURE_FOUND)
@@ -12,16 +11,14 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(tesseract_msgs REQUIRED)
 find_package(tesseract_rosutils REQUIRED)
-#find_package(pluginlib REQUIRED)
-#find_package(tf2_ros REQUIRED)
-#find_package(tf2_eigen REQUIRED)
-
+find_package(tesseract_motion_planners REQUIRED)
 
 # Tesseract ROS Nodes
 add_executable(${PROJECT_NAME}_planning_worker_node src/planning_worker_node.cpp)
 target_link_libraries(${PROJECT_NAME}_planning_worker_node PRIVATE
     tesseract::tesseract
     tesseract::tesseract_rosutils
+    tesseract::tesseract_motion_planners_ompl
     ${rclcpp_LIBRARIES}
     ${rclcpp_action_LIBRARIES}
     ${tesseract_msgs_LIBRARIES}
@@ -42,13 +39,11 @@ ament_export_dependencies(
     roscpp
     tesseract_msgs
     tesseract_rosutils
-#    pluginlib
-#    dynamic_reconfigure
+    tesseract_motion_planners
     tf2_ros
     tf2_eigen
     EIGEN3
     tesseract
-#    orocos_kdl
     )
 
 ament_export_include_directories(include)
@@ -57,17 +52,6 @@ ament_package()
 
 install(TARGETS ${PACKAGE_LIBRARIES} EXPORT ${PROJECT_NAME}-targets DESTINATION lib)
 install(EXPORT ${PROJECT_NAME}-targets NAMESPACE tesseract:: DESTINATION lib/cmake/${PROJECT_NAME})
-
-# Mark executables and/or libraries for installation
-#install(TARGETS
-#    ${PROJECT_NAME}_environment
-#    ${PROJECT_NAME}_contacts_node
-#    ${PROJECT_NAME}_environment_node
-##    demo_scene
-#  ARCHIVE DESTINATION lib
-#  LIBRARY DESTINATION lib
-#  RUNTIME DESTINATION bin
-#)
 
 install(TARGETS
    ${PROJECT_NAME}_planning_worker_node
@@ -79,10 +63,6 @@ install(DIRECTORY include/${PROJECT_NAME}
   FILES_MATCHING PATTERN "*.h"
   PATTERN ".svn" EXCLUDE
  )
-
-#install(DIRECTORY launch
-#  DESTINATION share/${PROJECT_NAME}/
-#)
 
 # Create cmake config files
 include(CMakePackageConfigHelpers)
