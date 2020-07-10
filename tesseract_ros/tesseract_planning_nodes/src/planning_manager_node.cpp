@@ -10,8 +10,25 @@ PlanningManagerNode::PlanningManagerNode()
   : rclcpp::Node ("planning_manager_node")
   , worker_status_srv_(this->create_service<UpdatePlanningWorkerStatus>("update_planning_worker_status",
                                                                         std::bind(&PlanningManagerNode::handle_update_planning_worker_status, this, _1, _2, _3)))
+  , solve_plan_cb_group_(this->create_callback_group(rclcpp::callback_group::CallbackGroupType::Reentrant))
+  , solve_plan_as_(rclcpp_action::create_server<SolvePlan>(
+                     this->get_node_base_interface(),
+                     this->get_node_clock_interface(),
+                     this->get_node_logging_interface(),
+                     this->get_node_waitables_interface(),
+                     "solve_plan",
+                     std::bind(&PlanningManagerNode::solve_plan_handle_goal, this, _1, _2),
+                     std::bind(&PlanningManagerNode::solve_plan_handle_cancel, this, _1),
+                     std::bind(&PlanningManagerNode::solve_plan_execute, this, _1),
+                     rcl_action_server_get_default_options(),
+                     solve_plan_cb_group_))
 {
 
+}
+
+unsigned long PlanningManagerNode::getNumClients()
+{
+  return solve_plan_clients_.size();
 }
 
 void PlanningManagerNode::handle_update_planning_worker_status(const std::shared_ptr<rmw_request_id_t> request_header,
@@ -20,7 +37,7 @@ void PlanningManagerNode::handle_update_planning_worker_status(const std::shared
 {
   std::string id = request->id;
 
-  CONSOLE_BRIDGE_logError("Received service request from worker id %s", id.c_str());
+  RCLCPP_INFO(this->get_logger(), "Received service request from worker id %s", id.c_str());
 
   if (request->action == UpdatePlanningWorkerStatus::Request::REGISTER)
   {
@@ -36,7 +53,7 @@ void PlanningManagerNode::handle_update_planning_worker_status(const std::shared
       return;
     }
 
-    CONSOLE_BRIDGE_logError("Registered worker with id %s", id.c_str());
+    RCLCPP_INFO(this->get_logger(), "Registered worker with id %s", id.c_str());
   }
   else if (request->action == UpdatePlanningWorkerStatus::Request::DEREGISTER)
   {
@@ -57,7 +74,7 @@ void PlanningManagerNode::handle_update_planning_worker_status(const std::shared
     }
 
     solve_plan_clients_.erase(client_mapped);
-    CONSOLE_BRIDGE_logError("Deregistered worker with id %s", id.c_str());
+    RCLCPP_INFO(this->get_logger(), "Deregistered worker with id %s", id.c_str());
   }
   else if (request->action == UpdatePlanningWorkerStatus::Request::UPDATE)
   {
@@ -65,12 +82,12 @@ void PlanningManagerNode::handle_update_planning_worker_status(const std::shared
     if (request->status == UpdatePlanningWorkerStatus::Request::BUSY)
     {
       client_mapped->second.first = true;
-      CONSOLE_BRIDGE_logError("Worker with id %s is now BUSY", id.c_str());
+      RCLCPP_INFO(this->get_logger(), "Worker with id %s is now BUSY", id.c_str());
     }
     else if (request->status == UpdatePlanningWorkerStatus::Request::IDLE)
     {
       client_mapped->second.first = false;
-      CONSOLE_BRIDGE_logError("Worker with id %s is now IDLE", id.c_str());
+      RCLCPP_INFO(this->get_logger(), "Worker with id %s is now IDLE", id.c_str());
     }
     else
     {
@@ -88,11 +105,74 @@ void PlanningManagerNode::handle_update_planning_worker_status(const std::shared
   return;
 }
 
+rclcpp_action::GoalResponse PlanningManagerNode::solve_plan_handle_goal(const rclcpp_action::GoalUUID& uuid, std::shared_ptr<const SolvePlan::Goal> goal)
+{
+  return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+}
+
+rclcpp_action::CancelResponse PlanningManagerNode::solve_plan_handle_cancel(const std::shared_ptr<ServerGoalHandleSolvePlan> goal_handle)
+{
+  (void) goal_handle;
+  return rclcpp_action::CancelResponse::ACCEPT;
+}
+
+void PlanningManagerNode::PlanningManagerNode::solve_plan_execute(const std::shared_ptr<ServerGoalHandleSolvePlan> goal_handle)
+{
+  auto goal_response_cb = [goal_handle](std::shared_future<ClientGoalHandleSolvePlan::SharedPtr> future)
+  {
+    auto gh = future.get();
+    if (!gh)
+    {
+      CONSOLE_BRIDGE_logWarn("Goal rejected");
+      auto result = std::make_shared<SolvePlan::Result>();
+      goal_handle->abort(result);
+    }
+  };
+
+  auto result_cb = [goal_handle](const ClientGoalHandleSolvePlan::WrappedResult& result)
+  {
+    auto solve_plan_result = std::make_shared<SolvePlan::Result>();
+    if (result.code == rclcpp_action::ResultCode::ABORTED || result.code == rclcpp_action::ResultCode::CANCELED)
+    {
+      CONSOLE_BRIDGE_logWarn("Goal aborted or canceled");
+      goal_handle->abort(solve_plan_result);
+      return;
+    }
+
+    solve_plan_result = result.result;
+    goal_handle->succeed(solve_plan_result);
+    return;
+  };
+
+  // get an idle client
+  for (auto it = solve_plan_clients_.begin(); it != solve_plan_clients_.end(); ++it)
+  {
+    if (!it->second.first)
+    {
+      SolvePlan::Goal goal;
+      goal.planner_config = goal_handle->get_goal()->planner_config;
+
+      auto send_goal_options = rclcpp_action::Client<SolvePlan>::SendGoalOptions();
+      send_goal_options.goal_response_callback = goal_response_cb;
+      send_goal_options.result_callback = result_cb;
+      auto goal_handle_future = it->second.second->async_send_goal(goal, send_goal_options);
+      return;
+    }
+  }
+
+  RCLCPP_WARN(this->get_logger(), "No idle workers available: aborting");
+
+  goal_handle->abort(std::make_shared<SolvePlan::Result>());
+}
+
 int main(int argc, char** argv)
 {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<tesseract_planning_nodes::PlanningManagerNode>();
   rclcpp::spin(node);
+
+  // TODO: Don't kill the manager if workers are stil registered.
+
   rclcpp::shutdown();
   return 0;
 }

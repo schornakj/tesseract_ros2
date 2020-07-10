@@ -1,5 +1,4 @@
-#ifndef TESSERACT_PLANNING_WORKER_NODE_H
-#define TESSERACT_PLANNING_WORKER_NODE_H
+#pragma once
 
 #define BOOST_BIND_NO_PLACEHOLDERS
 
@@ -19,6 +18,7 @@ TESSERACT_COMMON_IGNORE_WARNINGS_POP
 namespace tesseract_planning_nodes
 {
 
+  // TODO: good candiate for being a Lifecycle node
   class PlanningWorkerNode : public rclcpp::Node
   {
   public:
@@ -47,6 +47,10 @@ namespace tesseract_planning_nodes
 
     void deregister_worker();
 
+    void notify_busy();
+
+    void notify_idle();
+
     void solve_plan_handle_accepted(const std::shared_ptr<ServerGoalHandleSolvePlan> goal_handle);
 
     void solve_plan_execute(const std::shared_ptr<ServerGoalHandleSolvePlan> goal_handle);
@@ -61,5 +65,3 @@ namespace tesseract_planning_nodes
   };
 
 }
-
-#endif  // TESSERACT_PLANNING_WORKER_NODE_H

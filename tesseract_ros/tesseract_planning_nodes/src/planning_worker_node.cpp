@@ -67,8 +67,8 @@ void PlanningWorkerNode::initialize()
 void PlanningWorkerNode::register_worker()
 {
   auto register_req = std::make_shared<UpdatePlanningWorkerStatus::Request>();
-  register_req->action = UpdatePlanningWorkerStatus::Request::REGISTER;
   register_req->id = id_;
+  register_req->action = UpdatePlanningWorkerStatus::Request::REGISTER;
   auto res_future = worker_status_client_->async_send_request(register_req);
   res_future.wait_for(std::chrono::duration<double>(5.0));
 }
@@ -76,16 +76,36 @@ void PlanningWorkerNode::register_worker()
 void PlanningWorkerNode::deregister_worker()
 {
   auto deregister_req = std::make_shared<UpdatePlanningWorkerStatus::Request>();
-  deregister_req->action = UpdatePlanningWorkerStatus::Request::DEREGISTER;
   deregister_req->id = id_;
+  deregister_req->action = UpdatePlanningWorkerStatus::Request::DEREGISTER;
   auto res_future = worker_status_client_->async_send_request(deregister_req);
+  res_future.wait_for(std::chrono::duration<double>(5.0));
+}
+
+void PlanningWorkerNode::notify_busy()
+{
+  auto notify_req = std::make_shared<UpdatePlanningWorkerStatus::Request>();
+  notify_req->id = id_;
+  notify_req->action = UpdatePlanningWorkerStatus::Request::UPDATE;
+  notify_req->status = UpdatePlanningWorkerStatus::Request::BUSY;
+  auto res_future = worker_status_client_->async_send_request(notify_req);
+  res_future.wait_for(std::chrono::duration<double>(5.0));
+}
+
+void PlanningWorkerNode::notify_idle()
+{
+  auto notify_req = std::make_shared<UpdatePlanningWorkerStatus::Request>();
+  notify_req->id = id_;
+  notify_req->action = UpdatePlanningWorkerStatus::Request::UPDATE;
+  notify_req->status = UpdatePlanningWorkerStatus::Request::IDLE;
+  auto res_future = worker_status_client_->async_send_request(notify_req);
   res_future.wait_for(std::chrono::duration<double>(5.0));
 }
 
 rclcpp_action::GoalResponse PlanningWorkerNode::solve_plan_handle_goal(const rclcpp_action::GoalUUID &uuid, std::shared_ptr<const SolvePlan::Goal> goal)
 {
   (void) uuid;
-
+  notify_busy();
   return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
 }
 
@@ -96,7 +116,7 @@ rclcpp_action::CancelResponse PlanningWorkerNode::solve_plan_handle_cancel(const
 
 void PlanningWorkerNode::solve_plan_handle_accepted(const std::shared_ptr<ServerGoalHandleSolvePlan> goal_handle)
 {
-  std::thread{std::bind(&PlanningWorkerNode::solve_plan_execute, this, _1), goal_handle}.detach();
+  PlanningWorkerNode::solve_plan_execute(goal_handle);
 }
 
 void PlanningWorkerNode::solve_plan_execute(const std::shared_ptr<ServerGoalHandleSolvePlan> goal_handle)
@@ -119,6 +139,7 @@ void PlanningWorkerNode::solve_plan_execute(const std::shared_ptr<ServerGoalHand
     if (configurator.type != tesseract_msgs::msg::PlannerConfigurator::RRT_CONNECT)
     {
       goal_handle->abort(solve_plan_result);
+      notify_idle();
       return;
     }
 
@@ -148,6 +169,7 @@ void PlanningWorkerNode::solve_plan_execute(const std::shared_ptr<ServerGoalHand
   if (!planner.setConfiguration(planner_config))
   {
     goal_handle->abort(solve_plan_result);
+    notify_idle();
     return;
   }
 
@@ -157,12 +179,14 @@ void PlanningWorkerNode::solve_plan_execute(const std::shared_ptr<ServerGoalHand
   if (status.value() != tesseract_motion_planners::OMPLMotionPlannerStatusCategory::SolutionFound && status.value() != tesseract_motion_planners::OMPLMotionPlannerStatusCategory::ErrorFoundValidSolutionInCollision)
   {
     goal_handle->abort(solve_plan_result);
+    notify_idle();
     return;
   }
 
   tesseract_rosutils::toMsg(solve_plan_result->trajectory, kin->getJointNames(), planner_res.joint_trajectory.trajectory);
 
   goal_handle->succeed(solve_plan_result);
+  notify_idle();
 }
 
 void PlanningWorkerNode::on_environment_updated(const tesseract_msgs::msg::TesseractState::SharedPtr msg)
@@ -174,9 +198,9 @@ void PlanningWorkerNode::on_environment_updated(const tesseract_msgs::msg::Tesse
 int main(int argc, char** argv)
 {
   rclcpp::init(argc, argv);
-  srand(time(NULL));
-  auto node = std::make_shared<tesseract_planning_nodes::PlanningWorkerNode>("planning_worker_" + std::to_string(rand()));
-  rclcpp::sleep_for(std::chrono::seconds(1));
+  // TODO: request a unique process ID from the manager, or find a ROS2 way to generate one
+  auto id = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+  auto node = std::make_shared<tesseract_planning_nodes::PlanningWorkerNode>("planning_worker_" + std::to_string(id));
   node->initialize();
   rclcpp::spin(node);
   rclcpp::shutdown();
