@@ -167,11 +167,30 @@ void PlanningManagerNode::PlanningManagerNode::solve_plan_execute(const std::sha
 
 int main(int argc, char** argv)
 {
-  rclcpp::init(argc, argv);
-  auto node = std::make_shared<tesseract_planning_nodes::PlanningManagerNode>();
-  rclcpp::spin(node);
+  rclcpp::InitOptions init_ops;
+  init_ops.shutdown_on_sigint = false;
+  rclcpp::init(argc, argv, init_ops);
 
-  // TODO: Don't kill the manager if workers are stil registered.
+  auto node = std::make_shared<tesseract_planning_nodes::PlanningManagerNode>();
+
+  rclcpp::executors::MultiThreadedExecutor exec;
+  exec.add_node(node);
+
+  auto start = node->now();
+  auto elapsed = rclcpp::Duration(std::chrono::seconds(0));
+
+  std::cout << elapsed.seconds() << std::endl;
+
+  rclcpp::Rate rate(10);
+  while (true)
+  {
+    if (node->getNumClients() == 0 && elapsed.seconds() >= 5.0)
+      break;
+
+    elapsed = node->now() - start;
+    exec.spin_some();
+    rate.sleep();
+  }
 
   rclcpp::shutdown();
   return 0;

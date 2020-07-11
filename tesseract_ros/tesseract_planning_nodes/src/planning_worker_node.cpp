@@ -70,7 +70,7 @@ void PlanningWorkerNode::register_worker()
   register_req->id = id_;
   register_req->action = UpdatePlanningWorkerStatus::Request::REGISTER;
   auto res_future = worker_status_client_->async_send_request(register_req);
-  res_future.wait_for(std::chrono::duration<double>(5.0));
+  res_future.wait_for(std::chrono::duration<double>(2.0));
 }
 
 void PlanningWorkerNode::deregister_worker()
@@ -79,7 +79,7 @@ void PlanningWorkerNode::deregister_worker()
   deregister_req->id = id_;
   deregister_req->action = UpdatePlanningWorkerStatus::Request::DEREGISTER;
   auto res_future = worker_status_client_->async_send_request(deregister_req);
-  res_future.wait_for(std::chrono::duration<double>(5.0));
+  res_future.wait_for(std::chrono::duration<double>(2.0));
 }
 
 void PlanningWorkerNode::notify_busy()
@@ -89,7 +89,7 @@ void PlanningWorkerNode::notify_busy()
   notify_req->action = UpdatePlanningWorkerStatus::Request::UPDATE;
   notify_req->status = UpdatePlanningWorkerStatus::Request::BUSY;
   auto res_future = worker_status_client_->async_send_request(notify_req);
-  res_future.wait_for(std::chrono::duration<double>(5.0));
+  res_future.wait_for(std::chrono::duration<double>(2.0));
 }
 
 void PlanningWorkerNode::notify_idle()
@@ -99,7 +99,7 @@ void PlanningWorkerNode::notify_idle()
   notify_req->action = UpdatePlanningWorkerStatus::Request::UPDATE;
   notify_req->status = UpdatePlanningWorkerStatus::Request::IDLE;
   auto res_future = worker_status_client_->async_send_request(notify_req);
-  res_future.wait_for(std::chrono::duration<double>(5.0));
+  res_future.wait_for(std::chrono::duration<double>(2.0));
 }
 
 rclcpp_action::GoalResponse PlanningWorkerNode::solve_plan_handle_goal(const rclcpp_action::GoalUUID &uuid, std::shared_ptr<const SolvePlan::Goal> goal)
@@ -200,9 +200,15 @@ int main(int argc, char** argv)
   rclcpp::init(argc, argv);
   // TODO: request a unique process ID from the manager, or find a ROS2 way to generate one
   auto id = std::chrono::high_resolution_clock::now().time_since_epoch().count();
-  auto node = std::make_shared<tesseract_planning_nodes::PlanningWorkerNode>("planning_worker_" + std::to_string(id));
-  node->initialize();
-  rclcpp::spin(node);
+
+  {
+    auto node = std::make_shared<tesseract_planning_nodes::PlanningWorkerNode>("planning_worker_" + std::to_string(id));
+    rclcpp::sleep_for(std::chrono::seconds(1));
+    node->initialize();
+    rclcpp::spin(node);
+  }
+
+  // worker node deregisters from manager when it is destroyed, call shutdown only after it has gone out of scope
   rclcpp::shutdown();
   return 0;
 }
