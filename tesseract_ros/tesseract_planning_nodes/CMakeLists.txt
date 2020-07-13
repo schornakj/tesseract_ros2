@@ -9,6 +9,7 @@ list(FIND CMAKE_CXX_COMPILE_FEATURES cxx_std_17 CXX_FEATURE_FOUND)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(tesseract_msgs REQUIRED)
 find_package(tesseract_rosutils REQUIRED)
 find_package(tesseract_motion_planners REQUIRED)
@@ -59,6 +60,26 @@ target_include_directories(${PROJECT_NAME}_planning_manager_node SYSTEM PUBLIC
 )
 list (APPEND PACKAGE_LIBRARIES ${PROJECT_NAME}_planning_manager_node)
 
+add_executable(${PROJECT_NAME}_motion_manager_node src/test/motion_manager_node.cpp)
+target_link_libraries(${PROJECT_NAME}_motion_manager_node PRIVATE
+    ${rclcpp_LIBRARIES}
+    ${rclcpp_action_LIBRARIES}
+    ${std_srvs_LIBRARIES}
+    tesseract::tesseract
+    tesseract::tesseract_rosutils
+    )
+target_compile_options(${PROJECT_NAME}_motion_manager_node PRIVATE -Wall -Wextra -Wsuggest-override -Wconversion -Wsign-conversion)
+set_target_properties(${PROJECT_NAME}_motion_manager_node PROPERTIES CXX_STANDARD 14)
+target_include_directories(${PROJECT_NAME}_motion_manager_node PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>")
+target_include_directories(${PROJECT_NAME}_motion_manager_node SYSTEM PUBLIC
+    ${rclcpp_INCLUDE_DIRS}
+    ${rclcpp_action_INCLUDE_DIRS}
+    ${tesseract_msgs_INCLUDE_DIRS}
+    ${std_srvs_INCLUDE_DIRS}
+    ${sensor_msgs_INCLUDE_DIRS}
+)
+list (APPEND PACKAGE_LIBRARIES ${PROJECT_NAME}_motion_manager_node)
+
 ament_export_dependencies(
     roscpp
     tesseract_msgs
@@ -80,6 +101,7 @@ install(EXPORT ${PROJECT_NAME}-targets NAMESPACE tesseract:: DESTINATION lib/cma
 install(TARGETS
    ${PROJECT_NAME}_planning_worker_node
    ${PROJECT_NAME}_planning_manager_node
+   ${PROJECT_NAME}_motion_manager_node
    DESTINATION lib/${PROJECT_NAME})
 
 # Mark cpp header files for installation
@@ -88,6 +110,9 @@ install(DIRECTORY include/${PROJECT_NAME}
   FILES_MATCHING PATTERN "*.h"
   PATTERN ".svn" EXCLUDE
  )
+
+install(DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME})
 
 # Create cmake config files
 include(CMakePackageConfigHelpers)
