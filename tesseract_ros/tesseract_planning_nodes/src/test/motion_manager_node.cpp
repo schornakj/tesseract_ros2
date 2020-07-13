@@ -20,14 +20,20 @@ const static std::vector<double> end_state = { 0.2, 0.0, 0.0, 0.0, 0.0, 0.0 };
 
 MotionManagerNode::MotionManagerNode()
   : rclcpp::Node("motion_manager_node")
+  , do_motion_cb_group_(this->create_callback_group(rclcpp::callback_group::CallbackGroupType::Reentrant))
+  , solve_plan_cb_group_(this->create_callback_group(rclcpp::callback_group::CallbackGroupType::Reentrant))
   , do_motion_srv_(this->create_service<Trigger>("do_motion",
-                                                 std::bind(&MotionManagerNode::handle_do_motion, this, _1, _2, _3)))
+                                                 std::bind(&MotionManagerNode::handle_do_motion, this, _1, _2, _3),
+                                                 rmw_qos_profile_services_default,
+                                                 do_motion_cb_group_))
   , solve_plan_client_(rclcpp_action::create_client<SolvePlan>(this->get_node_base_interface(),
                                                                this->get_node_graph_interface(),
                                                                this->get_node_logging_interface(),
                                                                this->get_node_waitables_interface(),
                                                                "/solve_plan"))
   , tesseract_(std::make_shared<tesseract::Tesseract>())
+  , done_(true)
+  , succeeded_(true)
 {
   this->declare_parameter("urdf_path");
   this->declare_parameter("srdf_path");
@@ -53,6 +59,36 @@ MotionManagerNode::MotionManagerNode()
   srdf_ = srdf_xml_string.str();
 
   tesseract_->init(urdf_, srdf_, std::make_shared<tesseract_rosutils::ROSResourceLocator>());
+}
+
+void MotionManagerNode::solve_plan_response_cb(std::shared_future<ClientGoalHandleSolvePlan::SharedPtr> future)
+{
+  auto gh = future.get();
+  if (!gh)
+  {
+    CONSOLE_BRIDGE_logWarn("Goal rejected");
+    done_ = true;
+    succeeded_ = false;
+  }
+}
+
+void MotionManagerNode::solve_plan_result_cb(const ClientGoalHandleSolvePlan::WrappedResult& result)
+{
+  CONSOLE_BRIDGE_logWarn("Got a result!");
+
+  if (result.code == rclcpp_action::ResultCode::ABORTED || result.code == rclcpp_action::ResultCode::CANCELED)
+  {
+    CONSOLE_BRIDGE_logWarn("Goal aborted or canceled");
+    done_ = true;
+    succeeded_ = false;
+    return;
+  }
+
+  trajectory_msgs::msg::JointTrajectory traj = result.result->trajectory;
+  trajectories_.push_back(traj);
+  done_ = true;
+  succeeded_ = true;
+  return;
 }
 
 void MotionManagerNode::handle_do_motion(const std::shared_ptr<rmw_request_id_t> srv_request_header,
@@ -112,50 +148,28 @@ void MotionManagerNode::handle_do_motion(const std::shared_ptr<rmw_request_id_t>
 
   solve_plan_goal.planner_config = cfg;
 
-  std::cout << "4" << std::endl;
-
-
-  std::vector<trajectory_msgs::msg::JointTrajectory> trajectories;
-  bool succeeded = false;
-
-  auto goal_response_cb = [srv_response](std::shared_future<ClientGoalHandleSolvePlan::SharedPtr> future)
-  {
-    auto gh = future.get();
-    if (!gh)
-    {
-      CONSOLE_BRIDGE_logWarn("Goal rejected");
-    }
-  };
-
-  auto result_cb = [&trajectories, &succeeded](const ClientGoalHandleSolvePlan::WrappedResult& result)
-  {
-    CONSOLE_BRIDGE_logWarn("Got a result!");
-
-    if (result.code == rclcpp_action::ResultCode::ABORTED || result.code == rclcpp_action::ResultCode::CANCELED)
-    {
-      CONSOLE_BRIDGE_logWarn("Goal aborted or canceled");
-      return;
-    }
-
-    trajectory_msgs::msg::JointTrajectory traj = result.result->trajectory;
-    trajectories.push_back(traj);
-    succeeded = true;
-    return;
-  };
-
-  std::cout << "5" << std::endl;
-
+  std::cout << "4/5" << std::endl;
 
   auto send_goal_options = rclcpp_action::Client<SolvePlan>::SendGoalOptions();
-  send_goal_options.goal_response_callback = goal_response_cb;
-  send_goal_options.result_callback = result_cb;
+  send_goal_options.goal_response_callback = std::bind(&MotionManagerNode::solve_plan_response_cb, this, _1);
+  send_goal_options.result_callback = std::bind(&MotionManagerNode::solve_plan_result_cb, this, _1);
+
+  trajectories_.clear();
+  done_ = false;
   auto goal_handle_future = solve_plan_client_->async_send_goal(solve_plan_goal, send_goal_options);
-  goal_handle_future.wait();
+
+
+  rclcpp::Rate rate(100);
+
+  while(!done_)
+  {
+    rate.sleep();
+  }
 
   std::cout << "6" << std::endl;
 
 
-  if (!succeeded)
+  if (!succeeded_)
   {
     srv_response->success = false;
     return;
@@ -170,7 +184,9 @@ int main(int argc, char** argv)
   rclcpp::init(argc, argv);
   rclcpp::sleep_for(std::chrono::seconds(3));
   auto node = std::make_shared<tesseract_planning_nodes::MotionManagerNode>();
-  rclcpp::spin(node);
+  rclcpp::executors::MultiThreadedExecutor exec;
+  exec.add_node(node);
+  exec.spin();
   rclcpp::shutdown();
   return 0;
 }
