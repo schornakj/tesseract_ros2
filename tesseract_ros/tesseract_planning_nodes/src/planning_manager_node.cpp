@@ -151,6 +151,9 @@ void PlanningManagerNode::PlanningManagerNode::solve_plan_execute(const std::sha
     {
       SolvePlan::Goal goal;
       goal.planner_config = goal_handle->get_goal()->planner_config;
+      goal.urdf_path = goal_handle->get_goal()->urdf_path;
+      goal.srdf_path = goal_handle->get_goal()->srdf_path;
+      goal.tesseract_state = goal_handle->get_goal()->tesseract_state;
 
       auto send_goal_options = rclcpp_action::Client<SolvePlan>::SendGoalOptions();
       send_goal_options.goal_response_callback = goal_response_cb;

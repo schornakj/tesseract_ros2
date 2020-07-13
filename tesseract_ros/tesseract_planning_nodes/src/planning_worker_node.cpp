@@ -28,30 +28,8 @@ PlanningWorkerNode::PlanningWorkerNode(const std::string& id)
                      std::bind(&PlanningWorkerNode::solve_plan_handle_goal, this, _1, _2),
                      std::bind(&PlanningWorkerNode::solve_plan_handle_cancel, this, _1),
                      std::bind(&PlanningWorkerNode::solve_plan_handle_accepted, this, _1)))
-  , environment_state_sub_(this->create_subscription<tesseract_msgs::msg::TesseractState>("monitored_tesseract", 10, std::bind(&PlanningWorkerNode::on_environment_updated, this, _1)))
   , worker_status_client_(this->create_client<UpdatePlanningWorkerStatus>("update_planning_worker_status"))
 {
-  this->declare_parameter("robot_description");
-  this->declare_parameter("robot_description_semantic");
-
-  std::string urdf_path, srdf_path;
-  if (!this->get_parameter("robot_description", urdf_path))
-  {
-    return;
-  }
-  if (!this->get_parameter("robot_description_semantic", srdf_path))
-  {
-    return;
-  }
-  std::stringstream urdf_xml_string, srdf_xml_string;
-  std::ifstream urdf_in(urdf_path);
-  urdf_xml_string << urdf_in.rdbuf();
-  std::ifstream srdf_in(srdf_path);
-  srdf_xml_string << srdf_in.rdbuf();
-
-  tesseract_local_ = std::make_shared<tesseract::Tesseract>();
-  tesseract_scene_graph::ResourceLocator::Ptr locator = std::make_shared<tesseract_rosutils::ROSResourceLocator>();
-  tesseract_local_->init(urdf_xml_string.str(), srdf_xml_string.str(), locator);
 }
 
 PlanningWorkerNode::~PlanningWorkerNode()
@@ -78,6 +56,9 @@ void PlanningWorkerNode::notify_manager(const uint8_t action, const uint8_t stat
 rclcpp_action::GoalResponse PlanningWorkerNode::solve_plan_handle_goal(const rclcpp_action::GoalUUID &uuid, std::shared_ptr<const SolvePlan::Goal> goal)
 {
   (void) uuid;
+
+  // TODO: check validity of message contents, and reject if they're incorrect
+
   notify_manager(UpdatePlanningWorkerStatus::Request::UPDATE, UpdatePlanningWorkerStatus::Request::BUSY);
   return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
 }
@@ -100,7 +81,19 @@ void PlanningWorkerNode::solve_plan_execute(const std::shared_ptr<ServerGoalHand
 
   auto goal = goal_handle->get_goal();
 
-  tesseract_kinematics::ForwardKinematics::ConstPtr kin = tesseract_local_->getFwdKinematicsManagerConst()->getFwdKinematicSolver(goal->planner_config.manipulator);
+  // set up a Tesseract object for this planning session using contents of goal message
+  // TODO: add some mechanism for caching previously-used Tesseract objects, to avoid expensive setup process
+  auto tesseract_local = std::make_shared<tesseract::Tesseract>();
+  tesseract_scene_graph::ResourceLocator::Ptr locator = std::make_shared<tesseract_rosutils::ROSResourceLocator>();
+  std::stringstream urdf_xml_string, srdf_xml_string;
+  std::ifstream urdf_in(goal->urdf_path);
+  urdf_xml_string << urdf_in.rdbuf();
+  std::ifstream srdf_in(goal->srdf_path);
+  srdf_xml_string << srdf_in.rdbuf();
+  tesseract_local->init(urdf_xml_string.str(), srdf_xml_string.str(), locator);
+  tesseract_rosutils::processMsg(tesseract_local->getEnvironment(), goal->tesseract_state);
+
+  tesseract_kinematics::ForwardKinematics::ConstPtr kin = tesseract_local->getFwdKinematicsManagerConst()->getFwdKinematicSolver(goal->planner_config.manipulator);
 
   // Deserialize the planner config message into a tesseract_motion_planners planner object.
   // For this initial implementation only RRTconnect is supported.
@@ -122,7 +115,7 @@ void PlanningWorkerNode::solve_plan_execute(const std::shared_ptr<ServerGoalHand
     ompl_configurators.insert(ompl_configurators.end(), 1, rrt_connect_configurator);
   }
 
-  auto planner_config = std::make_shared<tesseract_motion_planners::OMPLPlannerFreespaceConfig>(tesseract_local_, goal->planner_config.manipulator, ompl_configurators);
+  auto planner_config = std::make_shared<tesseract_motion_planners::OMPLPlannerFreespaceConfig>(tesseract_local, goal->planner_config.manipulator, ompl_configurators);
 
   auto config_msg = goal->planner_config;
 
@@ -160,12 +153,6 @@ void PlanningWorkerNode::solve_plan_execute(const std::shared_ptr<ServerGoalHand
 
   goal_handle->succeed(solve_plan_result);
   notify_manager(UpdatePlanningWorkerStatus::Request::UPDATE, UpdatePlanningWorkerStatus::Request::IDLE);
-}
-
-void PlanningWorkerNode::on_environment_updated(const tesseract_msgs::msg::TesseractState::SharedPtr msg)
-{
-  const tesseract_environment::Environment::Ptr env = tesseract_local_->getEnvironment();
-  tesseract_rosutils::processMsg(env, *msg);
 }
 
 int main(int argc, char** argv)

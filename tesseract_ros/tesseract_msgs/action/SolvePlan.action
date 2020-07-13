@@ -1,5 +1,8 @@
 # Goal
 tesseract_msgs/PlannerConfig planner_config
+string urdf_path
+string srdf_path
+tesseract_msgs/TesseractState tesseract_state
 ---
 # Response
 trajectory_msgs/JointTrajectory trajectory

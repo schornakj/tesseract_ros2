@@ -51,11 +51,7 @@ namespace tesseract_planning_nodes
 
     rclcpp::Subscription<tesseract_msgs::msg::TesseractState>::SharedPtr environment_state_sub_;
 
-    void on_environment_updated(const tesseract_msgs::msg::TesseractState::SharedPtr msg);
-
     rclcpp::Client<UpdatePlanningWorkerStatus>::SharedPtr worker_status_client_;
-
-    tesseract::Tesseract::Ptr tesseract_local_;
   };
 
 }

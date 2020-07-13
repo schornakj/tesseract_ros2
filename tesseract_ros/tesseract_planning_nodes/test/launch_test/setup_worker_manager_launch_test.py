@@ -48,22 +48,22 @@ def generate_test_description():
         package='tesseract_planning_nodes',
         node_executable='tesseract_planning_nodes_planning_worker_node',
         output='screen',
-        parameters=[{
-            'robot_description': os.path.join(get_package_share_directory('tesseract_support'), 'urdf', 'abb_irb2400.urdf'),
-            'robot_description_semantic': os.path.join(get_package_share_directory('tesseract_support'),
-                                                       'urdf', 'abb_irb2400.srdf'),
-        }]
+        # parameters=[{
+        #     'robot_description': os.path.join(get_package_share_directory('tesseract_support'), 'urdf', 'abb_irb2400.urdf'),
+        #     'robot_description_semantic': os.path.join(get_package_share_directory('tesseract_support'),
+        #                                                'urdf', 'abb_irb2400.srdf'),
+        # }]
     )
 
     worker2 = launch_ros.actions.Node(
         package='tesseract_planning_nodes',
         node_executable='tesseract_planning_nodes_planning_worker_node',
         output='screen',
-        parameters=[{
-            'robot_description': os.path.join(get_package_share_directory('tesseract_support'), 'urdf', 'abb_irb2400.urdf'),
-            'robot_description_semantic': os.path.join(get_package_share_directory('tesseract_support'),
-                                                       'urdf', 'abb_irb2400.srdf'),
-        }]
+        # parameters=[{
+        #     'robot_description': os.path.join(get_package_share_directory('tesseract_support'), 'urdf', 'abb_irb2400.urdf'),
+        #     'robot_description_semantic': os.path.join(get_package_share_directory('tesseract_support'),
+        #                                                'urdf', 'abb_irb2400.srdf'),
+        # }]
     )
 
     return launch.LaunchDescription([
@@ -102,6 +102,9 @@ class SolvePlanClient(Node):
 
         goal_msg = SolvePlan.Goal()
         goal_msg.planner_config.manipulator = 'manipulator'
+
+        goal_msg.urdf_path = os.path.join(get_package_share_directory('tesseract_support'), 'urdf', 'abb_irb2400.urdf')
+        goal_msg.srdf_path = os.path.join(get_package_share_directory('tesseract_support'), 'urdf', 'abb_irb2400.srdf')
 
         configurator = PlannerConfigurator()
         configurator.range = 0.5
