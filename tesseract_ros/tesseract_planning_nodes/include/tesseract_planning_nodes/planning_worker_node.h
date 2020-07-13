@@ -43,13 +43,7 @@ namespace tesseract_planning_nodes
 
     rclcpp_action::CancelResponse solve_plan_handle_cancel(const std::shared_ptr<ServerGoalHandleSolvePlan> goal_handle);
 
-    void register_worker();
-
-    void deregister_worker();
-
-    void notify_busy();
-
-    void notify_idle();
+    void notify_manager(const uint8_t action, const uint8_t status);
 
     void solve_plan_handle_accepted(const std::shared_ptr<ServerGoalHandleSolvePlan> goal_handle);
 

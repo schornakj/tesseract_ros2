@@ -56,48 +56,21 @@ PlanningWorkerNode::PlanningWorkerNode(const std::string& id)
 
 PlanningWorkerNode::~PlanningWorkerNode()
 {
-  deregister_worker();
+  notify_manager(UpdatePlanningWorkerStatus::Request::DEREGISTER, 0);
 }
 
 void PlanningWorkerNode::initialize()
 {
-  register_worker();
+  worker_status_client_->wait_for_service();
+  notify_manager(UpdatePlanningWorkerStatus::Request::REGISTER, 0);
 }
 
-void PlanningWorkerNode::register_worker()
-{
-  auto register_req = std::make_shared<UpdatePlanningWorkerStatus::Request>();
-  register_req->id = id_;
-  register_req->action = UpdatePlanningWorkerStatus::Request::REGISTER;
-  auto res_future = worker_status_client_->async_send_request(register_req);
-  res_future.wait_for(std::chrono::duration<double>(2.0));
-}
-
-void PlanningWorkerNode::deregister_worker()
-{
-  auto deregister_req = std::make_shared<UpdatePlanningWorkerStatus::Request>();
-  deregister_req->id = id_;
-  deregister_req->action = UpdatePlanningWorkerStatus::Request::DEREGISTER;
-  auto res_future = worker_status_client_->async_send_request(deregister_req);
-  res_future.wait_for(std::chrono::duration<double>(2.0));
-}
-
-void PlanningWorkerNode::notify_busy()
+void PlanningWorkerNode::notify_manager(const uint8_t action, const uint8_t status)
 {
   auto notify_req = std::make_shared<UpdatePlanningWorkerStatus::Request>();
   notify_req->id = id_;
-  notify_req->action = UpdatePlanningWorkerStatus::Request::UPDATE;
-  notify_req->status = UpdatePlanningWorkerStatus::Request::BUSY;
-  auto res_future = worker_status_client_->async_send_request(notify_req);
-  res_future.wait_for(std::chrono::duration<double>(2.0));
-}
-
-void PlanningWorkerNode::notify_idle()
-{
-  auto notify_req = std::make_shared<UpdatePlanningWorkerStatus::Request>();
-  notify_req->id = id_;
-  notify_req->action = UpdatePlanningWorkerStatus::Request::UPDATE;
-  notify_req->status = UpdatePlanningWorkerStatus::Request::IDLE;
+  notify_req->action = action;
+  notify_req->status = status;
   auto res_future = worker_status_client_->async_send_request(notify_req);
   res_future.wait_for(std::chrono::duration<double>(2.0));
 }
@@ -105,7 +78,7 @@ void PlanningWorkerNode::notify_idle()
 rclcpp_action::GoalResponse PlanningWorkerNode::solve_plan_handle_goal(const rclcpp_action::GoalUUID &uuid, std::shared_ptr<const SolvePlan::Goal> goal)
 {
   (void) uuid;
-  notify_busy();
+  notify_manager(UpdatePlanningWorkerStatus::Request::UPDATE, UpdatePlanningWorkerStatus::Request::BUSY);
   return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
 }
 
@@ -139,7 +112,7 @@ void PlanningWorkerNode::solve_plan_execute(const std::shared_ptr<ServerGoalHand
     if (configurator.type != tesseract_msgs::msg::PlannerConfigurator::RRT_CONNECT)
     {
       goal_handle->abort(solve_plan_result);
-      notify_idle();
+      notify_manager(UpdatePlanningWorkerStatus::Request::UPDATE, UpdatePlanningWorkerStatus::Request::IDLE);
       return;
     }
 
@@ -169,7 +142,7 @@ void PlanningWorkerNode::solve_plan_execute(const std::shared_ptr<ServerGoalHand
   if (!planner.setConfiguration(planner_config))
   {
     goal_handle->abort(solve_plan_result);
-    notify_idle();
+    notify_manager(UpdatePlanningWorkerStatus::Request::UPDATE, UpdatePlanningWorkerStatus::Request::IDLE);
     return;
   }
 
@@ -179,14 +152,14 @@ void PlanningWorkerNode::solve_plan_execute(const std::shared_ptr<ServerGoalHand
   if (status.value() != tesseract_motion_planners::OMPLMotionPlannerStatusCategory::SolutionFound && status.value() != tesseract_motion_planners::OMPLMotionPlannerStatusCategory::ErrorFoundValidSolutionInCollision)
   {
     goal_handle->abort(solve_plan_result);
-    notify_idle();
+    notify_manager(UpdatePlanningWorkerStatus::Request::UPDATE, UpdatePlanningWorkerStatus::Request::IDLE);
     return;
   }
 
   tesseract_rosutils::toMsg(solve_plan_result->trajectory, kin->getJointNames(), planner_res.joint_trajectory.trajectory);
 
   goal_handle->succeed(solve_plan_result);
-  notify_idle();
+  notify_manager(UpdatePlanningWorkerStatus::Request::UPDATE, UpdatePlanningWorkerStatus::Request::IDLE);
 }
 
 void PlanningWorkerNode::on_environment_updated(const tesseract_msgs::msg::TesseractState::SharedPtr msg)
