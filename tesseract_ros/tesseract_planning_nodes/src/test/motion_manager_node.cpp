@@ -39,9 +39,12 @@ MotionManagerNode::MotionManagerNode()
                                                                       this->get_node_logging_interface(),
                                                                       this->get_node_waitables_interface(),
                                                                       "/follow_joint_trajectory"))
+  , js_sub_(this->create_subscription<sensor_msgs::msg::JointState>("/joint_states", 10, std::bind(&MotionManagerNode::joint_state_cb, this, _1)))
   , tesseract_(std::make_shared<tesseract::Tesseract>())
   , done_(true)
   , succeeded_(true)
+  , mt_gen_(static_cast<unsigned long>(std::chrono::high_resolution_clock::now().time_since_epoch().count()))
+  , dist_(-M_PI, M_PI)
 {
   this->declare_parameter("urdf_path");
   this->declare_parameter("srdf_path");
@@ -67,6 +70,12 @@ MotionManagerNode::MotionManagerNode()
   srdf_ = srdf_xml_string.str();
 
   tesseract_->init(urdf_, srdf_, std::make_shared<tesseract_rosutils::ROSResourceLocator>());
+
+  auto names = tesseract_->getFwdKinematicsManager()->getFwdKinematicSolver("manipulator")->getJointNames();
+  for (auto name : names)
+  {
+    js_map_.emplace(std::make_pair(name, 0.0));
+  }
 }
 
 void MotionManagerNode::solve_plan_response_cb(std::shared_future<ClientGoalHandleSolvePlan::SharedPtr> future)
@@ -116,24 +125,26 @@ void MotionManagerNode::handle_do_motion(const std::shared_ptr<rmw_request_id_t>
   auto kin = tesseract_->getFwdKinematicsManager()->getFwdKinematicSolver("manipulator");
   auto limits = kin->getLimits();
 
-  std::cout << "1" << std::endl;
-
   SolvePlan::Goal solve_plan_goal;
   solve_plan_goal.urdf_path = urdf_path_;
   solve_plan_goal.srdf_path = srdf_path_;
   tesseract_rosutils::toMsg(solve_plan_goal.tesseract_state, *tesseract_->getEnvironment());
 
-  std::cout << "2" << std::endl;
-
   sensor_msgs::msg::JointState start;
-  start.name = kin->getJointNames();
-  start.position = start_state;
+//  start.name = kin->getJointNames();
+//  start.position = start_state;
+
+  for (auto pair : js_map_)
+  {
+    start.name.push_back(pair.first);
+    start.position.push_back(pair.second);
+  }
 
   sensor_msgs::msg::JointState end;
   end.name = kin->getJointNames();
   end.position = end_state;
 
-  std::cout << "3" << std::endl;
+  end.position.at(0) = dist_(mt_gen_);
 
   tesseract_msgs::msg::PlannerConfigurator rrt_connect_cfg;
   rrt_connect_cfg.type = tesseract_msgs::msg::PlannerConfigurator::RRT_CONNECT;
@@ -156,8 +167,6 @@ void MotionManagerNode::handle_do_motion(const std::shared_ptr<rmw_request_id_t>
 
   solve_plan_goal.planner_config = cfg;
 
-  std::cout << "4/5" << std::endl;
-
   auto send_goal_options = rclcpp_action::Client<SolvePlan>::SendGoalOptions();
   send_goal_options.goal_response_callback = std::bind(&MotionManagerNode::solve_plan_response_cb, this, _1);
   send_goal_options.result_callback = std::bind(&MotionManagerNode::solve_plan_result_cb, this, _1);
@@ -174,16 +183,11 @@ void MotionManagerNode::handle_do_motion(const std::shared_ptr<rmw_request_id_t>
     rate.sleep();
   }
 
-  std::cout << "6" << std::endl;
-
-
   if (!succeeded_)
   {
     srv_response->success = false;
     return;
   }
-
-  std::cout << "7" << std::endl;
 
   auto traj_parameterized = applyTimeParameterization(trajectories_.front());
   traj_parameterized.joint_names = kin->getJointNames();
@@ -239,6 +243,18 @@ trajectory_msgs::msg::JointTrajectory MotionManagerNode::applyTimeParameterizati
 
   return traj_out;
 }
+
+void MotionManagerNode::joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr msg)
+{
+  for (std::size_t i = 0; i < msg->name.size(); i++)
+  {
+    if (js_map_.find(msg->name[i]) != js_map_.end())
+    {
+      js_map_.at(msg->name[i]) = msg->position[i];
+    }
+  }
+}
+
 
 int main(int argc, char** argv)
 {
