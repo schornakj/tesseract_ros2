@@ -1,8 +1,8 @@
 #include <tesseract_planning_nodes/test/motion_manager_node.h>
 #include <tesseract_rosutils/utils.h>
+#include <tesseract_environment/core/utils.h>
 
 #include <iterative_spline_parameterization/iterative_spline_parameterization.h>
-
 
 #include <fstream>
 
@@ -144,7 +144,25 @@ void MotionManagerNode::handle_do_motion(const std::shared_ptr<rmw_request_id_t>
   end.name = kin->getJointNames();
   end.position = end_state;
 
-  end.position.at(0) = dist_(mt_gen_);
+  bool in_contact = true;
+  std::size_t n_attempts = 0;
+  while(in_contact)
+  {
+    for (std::size_t i = 0; i < end.position.size(); i++)
+      end.position.at(i) = dist_(mt_gen_);
+
+    auto env_state = tesseract_->getEnvironment()->getStateSolver()->getState(end.name, end.position);
+    std::vector<tesseract_collision::ContactResultMap> results;
+    tesseract_collision::ContactRequest request(tesseract_collision::ContactTestType::FIRST);
+    in_contact = tesseract_environment::checkTrajectoryState(results, *(tesseract_->getEnvironment()->getDiscreteContactManager()), env_state, request, false);
+
+    if (n_attempts++ > 100)
+    {
+      srv_response->success = false;
+      return;
+    }
+  }
+
 
   tesseract_msgs::msg::PlannerConfigurator rrt_connect_cfg;
   rrt_connect_cfg.type = tesseract_msgs::msg::PlannerConfigurator::RRT_CONNECT;
