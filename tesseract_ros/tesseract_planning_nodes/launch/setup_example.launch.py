@@ -44,4 +44,7 @@ def generate_launch_description():
         worker1,
         worker2,
         toplevel,
+
+        gzserver,
+        gzspawner,
     ])

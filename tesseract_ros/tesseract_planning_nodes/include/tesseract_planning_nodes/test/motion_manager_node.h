@@ -10,6 +10,8 @@
 #include <tesseract/tesseract.h>
 #include <tesseract_msgs/action/solve_plan.hpp>
 
+#include <control_msgs/action/follow_joint_trajectory.hpp>
+
 
 namespace tesseract_planning_nodes
 {
@@ -19,6 +21,9 @@ namespace tesseract_planning_nodes
     using Trigger =  std_srvs::srv::Trigger;
     using SolvePlan = tesseract_msgs::action::SolvePlan;
     using ClientGoalHandleSolvePlan = rclcpp_action::ClientGoalHandle<SolvePlan>;
+
+    using FollowJointTraj = control_msgs::action::FollowJointTrajectory;
+    using ClientGoalHandleFollowJointTraj = rclcpp_action::ClientGoalHandle<FollowJointTraj>;
 
     MotionManagerNode();
 
@@ -34,10 +39,13 @@ namespace tesseract_planning_nodes
 
     void solve_plan_result_cb(const ClientGoalHandleSolvePlan::WrappedResult& result);
 
+    trajectory_msgs::msg::JointTrajectory applyTimeParameterization(const trajectory_msgs::msg::JointTrajectory& traj_in);
+
     rclcpp::Service<Trigger>::SharedPtr do_motion_srv_;
 
     rclcpp_action::Client<SolvePlan>::SharedPtr solve_plan_client_;
 
+    rclcpp_action::Client<FollowJointTraj>::SharedPtr follow_traj_client_;
 
     std::string urdf_, urdf_path_;
     std::string srdf_, srdf_path_;
@@ -45,7 +53,6 @@ namespace tesseract_planning_nodes
     std::atomic_bool done_;
     std::atomic_bool succeeded_;
     std::vector<trajectory_msgs::msg::JointTrajectory> trajectories_;
-
 
     std::shared_ptr<tesseract::Tesseract> tesseract_;
   };

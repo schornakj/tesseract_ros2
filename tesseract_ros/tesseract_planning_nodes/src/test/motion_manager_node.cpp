@@ -1,6 +1,9 @@
 #include <tesseract_planning_nodes/test/motion_manager_node.h>
 #include <tesseract_rosutils/utils.h>
 
+#include <iterative_spline_parameterization/iterative_spline_parameterization.h>
+
+
 #include <fstream>
 
 #include <Eigen/Dense>
@@ -11,7 +14,7 @@ using std::placeholders::_2;
 using std::placeholders::_3;
 
 const static std::vector<double> start_state = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
-const static std::vector<double> end_state = { 0.2, 0.0, 0.0, 0.0, 0.0, 0.0 };
+const static std::vector<double> end_state = { 0.5, -0.5, 0.0, 0.5, 0.5, 0.5 };
 
 //Eigen::VectorXd randomWithinLimits(const Eigen::MatrixX2d& limits)
 //{
@@ -31,6 +34,11 @@ MotionManagerNode::MotionManagerNode()
                                                                this->get_node_logging_interface(),
                                                                this->get_node_waitables_interface(),
                                                                "/solve_plan"))
+  , follow_traj_client_(rclcpp_action::create_client<FollowJointTraj>(this->get_node_base_interface(),
+                                                                      this->get_node_graph_interface(),
+                                                                      this->get_node_logging_interface(),
+                                                                      this->get_node_waitables_interface(),
+                                                                      "/follow_joint_trajectory"))
   , tesseract_(std::make_shared<tesseract::Tesseract>())
   , done_(true)
   , succeeded_(true)
@@ -138,7 +146,7 @@ void MotionManagerNode::handle_do_motion(const std::shared_ptr<rmw_request_id_t>
   cfg.start_state = start;
   cfg.end_state = end;
   cfg.collision_safety_margin = 0.01;
-  cfg.simplify = true;
+  cfg.simplify = false;
   cfg.planning_time = 30.0;
   cfg.collision_continuous = true;
   cfg.collision_check = true;
@@ -177,6 +185,59 @@ void MotionManagerNode::handle_do_motion(const std::shared_ptr<rmw_request_id_t>
 
   std::cout << "7" << std::endl;
 
+  auto traj_parameterized = applyTimeParameterization(trajectories_.front());
+  traj_parameterized.joint_names = kin->getJointNames();
+  traj_parameterized.header.frame_id = "world";
+
+  FollowJointTraj::Goal ft_goal;
+  ft_goal.trajectory = traj_parameterized;
+
+  auto gh_follow_traj_future = follow_traj_client_->async_send_goal(ft_goal);
+
+}
+
+trajectory_msgs::msg::JointTrajectory MotionManagerNode::applyTimeParameterization(const trajectory_msgs::msg::JointTrajectory &traj_in)
+{
+  trajectory_msgs::msg::JointTrajectory traj_out;
+
+  std::vector<iterative_spline_parameterization::TrajectoryState> waypoints;
+
+  for (auto point : traj_in.points)
+  {
+    // Convert joint angles in message (vector of doubles) to Eigen MatrixXd
+    Eigen::Matrix<double, 6, 1>  joint_angles(point.positions.data());
+
+    waypoints.push_back(
+      iterative_spline_parameterization::TrajectoryState(joint_angles,
+                                                         Eigen::Matrix<double, 6, 1>::Zero(),
+                                                         Eigen::Matrix<double, 6, 1>::Zero(),
+                                                         0.0));
+  }
+
+  iterative_spline_parameterization::IterativeSplineParameterization isp(false);
+
+  isp.computeTimeStamps(waypoints, 1.0, 1.0);
+
+  for (auto point : waypoints)
+  {
+    // Convert joint angles from parameterization output (Eigen::MatrixXd)
+    // to format in ROS message (vector of doubles)
+    trajectory_msgs::msg::JointTrajectoryPoint pt;
+    pt.time_from_start = rclcpp::Duration(std::chrono::duration<double>(point.time));
+
+    pt.positions.resize(static_cast<std::size_t>(point.positions.size()));
+    Eigen::VectorXd::Map(&pt.positions[0], point.positions.size()) = point.positions;
+
+    pt.velocities.resize(static_cast<std::size_t>(point.velocities.size()));
+    Eigen::VectorXd::Map(&pt.velocities[0], point.velocities.size()) = point.velocities;
+
+    pt.accelerations.resize(static_cast<std::size_t>(point.accelerations.size()));
+    Eigen::VectorXd::Map(&pt.accelerations[0], point.accelerations.size()) = point.accelerations;
+
+    traj_out.points.push_back(pt);
+  }
+
+  return traj_out;
 }
 
 int main(int argc, char** argv)

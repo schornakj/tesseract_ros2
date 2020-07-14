@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<sdf version='1.6'>
+  <world name="test">
+    <physics type="ode">
+      <ode>
+        <solver>
+          <type>world</type>
+        </solver>
+        <constraints>
+          <erp>0.0</erp>
+        </constraints>
+      </ode>
+    </physics>
+
+    <include>
+      <uri>model://ground_plane</uri>
+    </include>
+
+    <include>
+      <uri>model://sun</uri>
+    </include>
+
+    <gravity>0 0 0</gravity>
+  </world>
+</sdf>

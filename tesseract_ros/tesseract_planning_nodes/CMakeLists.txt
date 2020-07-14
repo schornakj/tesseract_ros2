@@ -7,6 +7,8 @@ find_package(Eigen3 REQUIRED)
 list(FIND CMAKE_CXX_COMPILE_FEATURES cxx_std_17 CXX_FEATURE_FOUND)
 
 find_package(ament_cmake REQUIRED)
+find_package(control_msgs REQUIRED)
+find_package(iterative_spline_parameterization REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(std_srvs REQUIRED)
@@ -65,8 +67,10 @@ target_link_libraries(${PROJECT_NAME}_motion_manager_node PRIVATE
     ${rclcpp_LIBRARIES}
     ${rclcpp_action_LIBRARIES}
     ${std_srvs_LIBRARIES}
+    ${control_msgs_LIBRARIES}
     tesseract::tesseract
     tesseract::tesseract_rosutils
+    iterative_spline_parameterization::iterative_spline_parameterization
     )
 target_compile_options(${PROJECT_NAME}_motion_manager_node PRIVATE -Wall -Wextra -Wsuggest-override -Wconversion -Wsign-conversion)
 set_target_properties(${PROJECT_NAME}_motion_manager_node PROPERTIES CXX_STANDARD 14)
@@ -77,6 +81,7 @@ target_include_directories(${PROJECT_NAME}_motion_manager_node SYSTEM PUBLIC
     ${tesseract_msgs_INCLUDE_DIRS}
     ${std_srvs_INCLUDE_DIRS}
     ${sensor_msgs_INCLUDE_DIRS}
+    ${control_msgs_INCLUDE_DIRS}
 )
 list (APPEND PACKAGE_LIBRARIES ${PROJECT_NAME}_motion_manager_node)
 
@@ -111,7 +116,7 @@ install(DIRECTORY include/${PROJECT_NAME}
   PATTERN ".svn" EXCLUDE
  )
 
-install(DIRECTORY launch
+install(DIRECTORY launch worlds
   DESTINATION share/${PROJECT_NAME})
 
 # Create cmake config files
