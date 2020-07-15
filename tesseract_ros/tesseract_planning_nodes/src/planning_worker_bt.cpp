@@ -1,6 +1,7 @@
 #include <tesseract_planning_nodes/planning_worker_bt.h>
 #include <tesseract_rosutils/utils.h>
 #include <tesseract_rosutils/conversions.h>
+#include <console_bridge/console.h>
 
 using namespace tesseract_planning_nodes;
 
@@ -32,11 +33,38 @@ BT::NodeStatus PlannerBT::planJointInterp()
 
   result_ = trajectory_msgs::msg::JointTrajectory();
 
+  CONSOLE_BRIDGE_logDebug("Worker Start:\n%s %f\n%s %f\n%s %f\n%s %f\n%s %f\n%s %f\n",
+                          config_.start_state.name[0].c_str(), config_.start_state.position[0],
+                          config_.start_state.name[1].c_str(), config_.start_state.position[1],
+                          config_.start_state.name[2].c_str(), config_.start_state.position[2],
+                          config_.start_state.name[3].c_str(), config_.start_state.position[3],
+                          config_.start_state.name[4].c_str(), config_.start_state.position[4],
+                          config_.start_state.name[5].c_str(), config_.start_state.position[5]);
+
+  CONSOLE_BRIDGE_logDebug("Worker End:\n%s %f\n%s %f\n%s %f\n%s %f\n%s %f\n%s %f\n",
+                          config_.end_state.name[0].c_str(), config_.end_state.position[0],
+                          config_.end_state.name[1].c_str(), config_.end_state.position[1],
+                          config_.end_state.name[2].c_str(), config_.end_state.position[2],
+                          config_.end_state.name[3].c_str(), config_.end_state.position[3],
+                          config_.end_state.name[4].c_str(), config_.end_state.position[4],
+                          config_.end_state.name[5].c_str(), config_.end_state.position[5]);
+
+  std::map<std::string, std::double_t> map_start, map_end;
+
+  for (std::size_t i = 0; i < config_.start_state.name.size(); i++)
+  {
+    map_start.emplace(std::make_pair(config_.start_state.name.at(i), config_.start_state.position.at(i)));
+    map_end.emplace(std::make_pair(config_.end_state.name.at(i), config_.end_state.position.at(i)));
+  }
+
   Eigen::MatrixXd traj_interp;
   traj_interp.resize(config_.n_output_states, static_cast<Eigen::Index>(config_.end_state.position.size()));
-  for (std::size_t i = 0; i < config_.end_state.position.size(); i++)
+  for (std::size_t i = 0; i < config_.end_state.name.size(); i++)
   {
-    traj_interp.col(i) = Eigen::VectorXd::LinSpaced(config_.n_output_states, config_.start_state.position.at(i), config_.end_state.position.at(i));
+    auto pos_start = map_start.at(config_.end_state.name.at(i));
+    auto pos_end = map_end.at(config_.end_state.name.at(i));
+
+    traj_interp.col(i) = Eigen::VectorXd::LinSpaced(config_.n_output_states, pos_start, pos_end);
   }
 
   if(config_.collision_check)

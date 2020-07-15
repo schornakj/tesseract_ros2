@@ -190,6 +190,22 @@ void MotionManagerNode::handle_do_motion(const std::shared_ptr<rmw_request_id_t>
 
   solve_plan_goal.planner_config = cfg;
 
+  RCLCPP_DEBUG(this->get_logger(), "Motion manager Start:\n%s %f\n%s %f\n%s %f\n%s %f\n%s %f\n%s %f\n",
+               start.name[0].c_str(), start.position[0],
+               start.name[1].c_str(), start.position[1],
+               start.name[2].c_str(), start.position[2],
+               start.name[3].c_str(), start.position[3],
+               start.name[4].c_str(), start.position[4],
+               start.name[5].c_str(), start.position[5]);
+
+  RCLCPP_DEBUG(this->get_logger(), "Motion manager End:\n%s %f\n%s %f\n%s %f\n%s %f\n%s %f\n%s %f\n",
+               end.name[0].c_str(), end.position[0],
+               end.name[1].c_str(), end.position[1],
+               end.name[2].c_str(), end.position[2],
+               end.name[3].c_str(), end.position[3],
+               end.name[4].c_str(), end.position[4],
+               end.name[5].c_str(), end.position[5]);
+
   auto send_goal_options = rclcpp_action::Client<SolvePlan>::SendGoalOptions();
   send_goal_options.goal_response_callback = std::bind(&MotionManagerNode::solve_plan_response_cb, this, _1);
   send_goal_options.result_callback = std::bind(&MotionManagerNode::solve_plan_result_cb, this, _1);
