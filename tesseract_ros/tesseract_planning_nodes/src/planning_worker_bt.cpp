@@ -29,15 +29,42 @@ void PlannerBT::RegisterNodes(BT::BehaviorTreeFactory& factory)
 BT::NodeStatus PlannerBT::planJointInterp()
 {
   std::cout << "Trying to solve as joint interpolated trajectory..." << std::endl;
-//  std::this_thread::sleep_for(std::chrono::duration<double>(0.5));
 
-  std::cout << "Joint interpolation failed" << std::endl;
-  return BT::NodeStatus::FAILURE;
+  result_ = trajectory_msgs::msg::JointTrajectory();
+
+  Eigen::MatrixXd traj_interp;
+  traj_interp.resize(config_.n_output_states, static_cast<Eigen::Index>(config_.end_state.position.size()));
+  for (std::size_t i = 0; i < config_.end_state.position.size(); i++)
+  {
+    traj_interp.col(i) = Eigen::VectorXd::LinSpaced(config_.n_output_states, config_.start_state.position.at(i), config_.end_state.position.at(i));
+  }
+
+  if(config_.collision_check)
+  {
+    auto state_solver = tesseract_local_->getEnvironment()->getStateSolver();
+    auto contact_manager = tesseract_local_->getEnvironment()->getContinuousContactManager();
+    contact_manager->setContactDistanceThreshold(config_.collision_safety_margin);
+
+    std::vector<tesseract_collision::ContactResultMap> contact_result;
+    tesseract_collision::ContactRequest request(tesseract_collision::ContactTestType::FIRST);
+    if(tesseract_environment::checkTrajectory(contact_result, *contact_manager, *state_solver, config_.end_state.name, traj_interp))
+    {
+      std::cout << "Joint interpolation failed" << std::endl;
+      return BT::NodeStatus::FAILURE;
+    }
+  }
+
+  tesseract_rosutils::toMsg(result_, config_.end_state.name, traj_interp);
+
+  std::cout << "Joint interpolation succeeded" << std::endl;
+  return BT::NodeStatus::SUCCESS;
 }
 
 BT::NodeStatus PlannerBT::planOMPL()
 {
   std::cout << "Trying to solve as OMPL FS trajectory..." << std::endl;
+
+  result_ = trajectory_msgs::msg::JointTrajectory();
 
   tesseract_kinematics::ForwardKinematics::ConstPtr kin = tesseract_local_->getFwdKinematicsManagerConst()->getFwdKinematicSolver(config_.manipulator);
 
