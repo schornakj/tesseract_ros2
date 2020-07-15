@@ -7,6 +7,7 @@ find_package(Eigen3 REQUIRED)
 list(FIND CMAKE_CXX_COMPILE_FEATURES cxx_std_17 CXX_FEATURE_FOUND)
 
 find_package(ament_cmake REQUIRED)
+find_package(behaviortree_cpp_v3 REQUIRED)
 find_package(control_msgs REQUIRED)
 find_package(iterative_spline_parameterization REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -18,8 +19,11 @@ find_package(tesseract_motion_planners REQUIRED)
 find_package(ompl REQUIRED)
 
 # Tesseract ROS Nodes
-add_executable(${PROJECT_NAME}_planning_worker_node src/planning_worker_node.cpp)
+add_executable(${PROJECT_NAME}_planning_worker_node src/planning_worker_node.cpp src/planning_worker_bt.cpp)
+#target_link_libraries(${PROJECT_NAME}_nodes PUBLIC ${BEHAVIOR_TREE_LIBRARY})
 target_link_libraries(${PROJECT_NAME}_planning_worker_node PRIVATE
+    ${BEHAVIOR_TREE_LIBRARY}
+    ${behaviortree_cpp_v3_LIBRARIES}
     tesseract::tesseract
     tesseract::tesseract_rosutils
     tesseract::tesseract_motion_planners_ompl
@@ -30,9 +34,11 @@ target_link_libraries(${PROJECT_NAME}_planning_worker_node PRIVATE
     ${OMPL_LIBRARIES}
     )
 target_compile_options(${PROJECT_NAME}_planning_worker_node PRIVATE -Wall -Wextra -Wsuggest-override -Wconversion -Wsign-conversion)
+target_compile_definitions(${PROJECT_NAME}_planning_worker_node PRIVATE BT_PLUGIN_EXPORT )
 set_target_properties(${PROJECT_NAME}_planning_worker_node PROPERTIES CXX_STANDARD 14)
 target_include_directories(${PROJECT_NAME}_planning_worker_node PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>")
 target_include_directories(${PROJECT_NAME}_planning_worker_node SYSTEM PUBLIC
+    ${behaviortree_cpp_v3_INCLUDE_DIRS}
     ${rclcpp_INCLUDE_DIRS}
     ${rclcpp_action_INCLUDE_DIRS}
     ${tesseract_msgs_INCLUDE_DIRS}

@@ -1,4 +1,5 @@
 #include <tesseract_planning_nodes/planning_worker_node.h>
+#include <tesseract_planning_nodes/planning_worker_bt.h>
 
 #include <tesseract_motion_planners/ompl/config/ompl_planner_freespace_config.h>
 #include <tesseract_motion_planners/ompl/ompl_motion_planner.h>
@@ -10,6 +11,19 @@
 using namespace tesseract_planning_nodes;
 using std::placeholders::_1;
 using std::placeholders::_2;
+
+static const char* xml_text = R"(
+<root main_tree_to_execute = "MainTree">
+    <BehaviorTree ID="MainTree">
+        <Sequence>
+            <Fallback name="root_Fallback">
+                <PlanJointInterp/>
+                <PlanOMPL/>
+            </Fallback>
+        </Sequence>
+    </BehaviorTree>
+</root>
+ )";
 
 PlanningWorkerNode::PlanningWorkerNode()
   : PlanningWorkerNode("planning_worker_test")
@@ -76,83 +90,34 @@ void PlanningWorkerNode::solve_plan_handle_accepted(const std::shared_ptr<Server
 void PlanningWorkerNode::solve_plan_execute(const std::shared_ptr<ServerGoalHandleSolvePlan> goal_handle)
 {
   CONSOLE_BRIDGE_logInform("Executing solve_plan request");
-
   auto solve_plan_result = std::make_shared<SolvePlan::Result>();
 
-  auto goal = goal_handle->get_goal();
+  PlannerBT planner_bt(*(goal_handle->get_goal()));
 
-  // set up a Tesseract object for this planning session using contents of goal message
-  // TODO: add some mechanism for caching previously-used Tesseract objects, to avoid expensive setup process
-  auto tesseract_local = std::make_shared<tesseract::Tesseract>();
-  tesseract_scene_graph::ResourceLocator::Ptr locator = std::make_shared<tesseract_rosutils::ROSResourceLocator>();
-  std::stringstream urdf_xml_string, srdf_xml_string;
-  std::ifstream urdf_in(goal->urdf_path);
-  urdf_xml_string << urdf_in.rdbuf();
-  std::ifstream srdf_in(goal->srdf_path);
-  srdf_xml_string << srdf_in.rdbuf();
-  tesseract_local->init(urdf_xml_string.str(), srdf_xml_string.str(), locator);
-  tesseract_rosutils::processMsg(tesseract_local->getEnvironment(), goal->tesseract_state);
+  BT::BehaviorTreeFactory factory;
+  planner_bt.RegisterNodes(factory);
+  auto tree = factory.createTreeFromText(xml_text);
 
-  tesseract_kinematics::ForwardKinematics::ConstPtr kin = tesseract_local->getFwdKinematicsManagerConst()->getFwdKinematicSolver(goal->planner_config.manipulator);
 
-  // Deserialize the planner config message into a tesseract_motion_planners planner object.
-  // For this initial implementation only RRTconnect is supported.
-
-  std::vector<tesseract_motion_planners::OMPLPlannerConfigurator::ConstPtr> ompl_configurators;
-
-  for (auto configurator : goal->planner_config.configurators)
+  rclcpp::Rate rate(100);
+  BT::NodeStatus status = BT::NodeStatus::RUNNING;
+  while( status == BT::NodeStatus::RUNNING)
   {
-    if (configurator.type != tesseract_msgs::msg::PlannerConfigurator::RRT_CONNECT)
-    {
+      status = tree.tickRoot();
+      rate.sleep();
+  }
+
+  if (status == BT::NodeStatus::FAILURE)
+  {
       goal_handle->abort(solve_plan_result);
       notify_manager(UpdatePlanningWorkerStatus::Request::UPDATE, UpdatePlanningWorkerStatus::Request::IDLE);
       return;
-    }
-
-    auto rrt_connect_configurator = std::make_shared<tesseract_motion_planners::RRTConnectConfigurator>();
-    rrt_connect_configurator->range = configurator.range;
-
-    ompl_configurators.insert(ompl_configurators.end(), 1, rrt_connect_configurator);
   }
 
-  auto planner_config = std::make_shared<tesseract_motion_planners::OMPLPlannerFreespaceConfig>(tesseract_local, goal->planner_config.manipulator, ompl_configurators);
-
-  auto config_msg = goal->planner_config;
-
-  planner_config->start_waypoint = tesseract_rosutils::toWaypoint(config_msg.start_state);
-  planner_config->end_waypoint = tesseract_rosutils::toWaypoint(config_msg.end_state);
-  planner_config->collision_safety_margin = config_msg.collision_safety_margin;
-  planner_config->simplify = config_msg.simplify;
-  planner_config->planning_time = config_msg.planning_time;
-  planner_config->collision_continuous = config_msg.collision_continuous;
-  planner_config->collision_check = config_msg.collision_check;
-  planner_config->max_solutions = config_msg.max_solutions;
-  planner_config->longest_valid_segment_length = config_msg.longest_valid_segment_length;
-  planner_config->n_output_states = config_msg.n_output_states;
-
-  tesseract_motion_planners::OMPLMotionPlanner planner;
-
-  if (!planner.setConfiguration(planner_config))
-  {
-    goal_handle->abort(solve_plan_result);
-    notify_manager(UpdatePlanningWorkerStatus::Request::UPDATE, UpdatePlanningWorkerStatus::Request::IDLE);
-    return;
-  }
-
-  tesseract_motion_planners::PlannerResponse planner_res;
-  tesseract_common::StatusCode status = planner.solve(planner_res);
-
-  if (status.value() != tesseract_motion_planners::OMPLMotionPlannerStatusCategory::SolutionFound && status.value() != tesseract_motion_planners::OMPLMotionPlannerStatusCategory::ErrorFoundValidSolutionInCollision)
-  {
-    goal_handle->abort(solve_plan_result);
-    notify_manager(UpdatePlanningWorkerStatus::Request::UPDATE, UpdatePlanningWorkerStatus::Request::IDLE);
-    return;
-  }
-
-  tesseract_rosutils::toMsg(solve_plan_result->trajectory, kin->getJointNames(), planner_res.joint_trajectory.trajectory);
-
+  solve_plan_result->trajectory = planner_bt.getResult();
   goal_handle->succeed(solve_plan_result);
   notify_manager(UpdatePlanningWorkerStatus::Request::UPDATE, UpdatePlanningWorkerStatus::Request::IDLE);
+  return;
 }
 
 int main(int argc, char** argv)

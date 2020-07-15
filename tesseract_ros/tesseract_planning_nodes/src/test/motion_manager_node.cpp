@@ -144,17 +144,22 @@ void MotionManagerNode::handle_do_motion(const std::shared_ptr<rmw_request_id_t>
   end.name = kin->getJointNames();
   end.position = end_state;
 
+  auto contact_manager = tesseract_->getEnvironment()->getDiscreteContactManager();
+  contact_manager->setContactDistanceThreshold(0.01);
+
   bool in_contact = true;
   std::size_t n_attempts = 0;
   while(in_contact)
   {
+    std::cout << "n_attempts: " << n_attempts << std::endl;
+
     for (std::size_t i = 0; i < end.position.size(); i++)
       end.position.at(i) = dist_(mt_gen_);
 
     auto env_state = tesseract_->getEnvironment()->getStateSolver()->getState(end.name, end.position);
     std::vector<tesseract_collision::ContactResultMap> results;
     tesseract_collision::ContactRequest request(tesseract_collision::ContactTestType::FIRST);
-    in_contact = tesseract_environment::checkTrajectoryState(results, *(tesseract_->getEnvironment()->getDiscreteContactManager()), env_state, request, false);
+    in_contact = tesseract_environment::checkTrajectoryState(results, *contact_manager, env_state, request, false);
 
     if (n_attempts++ > 100)
     {
